@@ -5,6 +5,7 @@ import uuid
 import datetime
 import json
 import time
+import pandas as pd
 
 st.title("Hello, World!")
 st.write("Welcome to your first Streamlit app!")
@@ -171,6 +172,14 @@ if total_evaluated > 0:
     st.metric("Average Buyer Score", f"{avg_buyer_score:.2f}")
     st.metric("Average Difference", f"{avg_difference:.2f}")
     st.metric("Total Evaluation Time (min)", f"{total_time/60:.2f}")
+
+    # --- Line Plot of Scores ---
+    df = pd.DataFrame({
+        "Machine Score": [e['score'] for e in history_entries],
+        "Buyer Score": [e['buyer_score'] for e in history_entries]
+    })
+    df = df[::-1].reset_index(drop=True)  # Most recent last, so x-axis is chronological
+    st.line_chart(df)
 else:
     st.info("No evaluations yet.")
 
