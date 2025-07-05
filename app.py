@@ -10,68 +10,60 @@ import pandas as pd
 st.title("Hello, World!")
 st.write("Welcome to your first Streamlit app!")
 
-st.header("Upload an Image or Video for Fashion Scoring")
+st.header("Batch Upload and Score Fashion Looks")
 
 # Ensure uploads directory exists
 UPLOAD_DIR = "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
-uploaded_file = st.file_uploader("Choose an image or video", type=["jpg", "jpeg", "png", "mp4", "mov", "avi"])
+# --- Batch Upload Logic ---
+if 'batch_files' not in st.session_state:
+    st.session_state['batch_files'] = []
+if 'batch_index' not in st.session_state:
+    st.session_state['batch_index'] = 0
+if 'batch_saved' not in st.session_state:
+    st.session_state['batch_saved'] = []
 
-# Use session state to store the machine score and file info
-if 'last_file_id' not in st.session_state:
-    st.session_state['last_file_id'] = None
-if 'machine_score' not in st.session_state:
-    st.session_state['machine_score'] = None
-if 'base_filename' not in st.session_state:
-    st.session_state['base_filename'] = None
-if 'timestamp' not in st.session_state:
-    st.session_state['timestamp'] = None
-if 'unique_id' not in st.session_state:
-    st.session_state['unique_id'] = None
-if 'eval_start_time' not in st.session_state:
-    st.session_state['eval_start_time'] = None
-if 'delete_trigger' not in st.session_state:
-    st.session_state['delete_trigger'] = 0
+uploaded_files = st.file_uploader(
+    "Upload fashion looks (images/videos)",
+    type=["jpg", "jpeg", "png", "mp4", "mov", "avi"],
+    accept_multiple_files=True
+)
 
-if uploaded_file is not None:
-    file_type = uploaded_file.type
-    # Generate a unique file id based on name and size
-    file_id = f"{uploaded_file.name}_{uploaded_file.size}"
-    # If a new file is uploaded, generate new machine score and file info
-    if st.session_state['last_file_id'] != file_id:
-        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        unique_id = uuid.uuid4().hex[:6]
-        ext = os.path.splitext(uploaded_file.name)[-1]
-        base_filename = f"{timestamp}_{unique_id}{ext}"
-        st.session_state['timestamp'] = timestamp
-        st.session_state['unique_id'] = unique_id
-        st.session_state['base_filename'] = base_filename
-        st.session_state['last_file_id'] = file_id
-        st.session_state['machine_score'] = random.randint(0, 100)
-        st.session_state['eval_start_time'] = time.time()  # Start timing
-    # Use stored values
-    timestamp = st.session_state['timestamp']
-    unique_id = st.session_state['unique_id']
-    base_filename = st.session_state['base_filename']
-    score = st.session_state['machine_score']
+# If new files are uploaded, reset batch state
+if uploaded_files:
+    if uploaded_files != st.session_state['batch_files']:
+        st.session_state['batch_files'] = uploaded_files
+        st.session_state['batch_index'] = 0
+        st.session_state['batch_saved'] = [False] * len(uploaded_files)
+
+batch_files = st.session_state['batch_files']
+batch_index = st.session_state['batch_index']
+batch_saved = st.session_state['batch_saved']
+
+if batch_files and batch_index < len(batch_files):
+    file = batch_files[batch_index]
+    st.subheader(f"Scoring {batch_index+1} of {len(batch_files)}")
+    file_type = file.type
+    # Generate unique file info
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    unique_id = uuid.uuid4().hex[:6]
+    ext = os.path.splitext(file.name)[-1]
+    base_filename = f"{timestamp}_{unique_id}{ext}"
     file_path = os.path.join(UPLOAD_DIR, base_filename)
-    eval_start_time = st.session_state['eval_start_time']
 
     # Save the uploaded file (only if not already saved)
     if not os.path.exists(file_path):
         with open(file_path, "wb") as out_file:
-            out_file.write(uploaded_file.getbuffer())
+            out_file.write(file.getbuffer())
 
     # Display the file
     if file_type.startswith("image"):
-        st.image(uploaded_file, caption="Uploaded Image", use_container_width=True)
+        st.image(file, caption="Uploaded Image", use_container_width=True)
     elif file_type.startswith("video"):
-        st.video(uploaded_file)
-    
+        st.video(file)
+
     passing_score = 60
-    
-    # List of possible reasons
     reasons = [
         "Great color combination!",
         "Trendy style and fit.",
@@ -84,35 +76,32 @@ if uploaded_file is not None:
         "Outfit could use more layering.",
         "Simple and elegant!"
     ]
-    # Use a fixed reason per upload
-    if 'reason' not in st.session_state or st.session_state['last_file_id'] != file_id:
-        st.session_state['reason'] = random.choice(reasons)
-    reason = st.session_state['reason']
+    # Generate machine score and reason
+    if f'machine_score_{batch_index}' not in st.session_state:
+        st.session_state[f'machine_score_{batch_index}'] = random.randint(0, 100)
+    if f'reason_{batch_index}' not in st.session_state:
+        st.session_state[f'reason_{batch_index}'] = random.choice(reasons)
+    score = st.session_state[f'machine_score_{batch_index}']
+    reason = st.session_state[f'reason_{batch_index}']
 
     st.subheader(f"Machine Fashion Score: {score}")
     st.progress(score)
-    
     if score >= passing_score:
         st.success(f"Pass! (Score ≥ {passing_score})")
     else:
         st.error(f"Not Passed (Score < {passing_score})")
-    
     st.info(f"Reason: {reason}")
 
-    # Fashion buyer can select their own score
     st.subheader("Fashion Buyer Score")
     buyer_score = st.slider(
         "Select your score as a fashion buyer:",
-        min_value=0, max_value=100, value=score, key=f"buyer_score_slider_{base_filename}"
+        min_value=0, max_value=100, value=score, key=f"buyer_score_slider_{batch_index}"
     )
     st.write(f"Fashion Buyer Score: {buyer_score}")
     st.progress(buyer_score)
 
-    # Save button
-    if st.button("Save Scores and Metadata"):
+    if st.button("Save and Next", key=f"save_next_{batch_index}"):
         score_diff = abs(score - buyer_score)
-        eval_end_time = time.time()
-        eval_duration = eval_end_time - eval_start_time if eval_start_time else None
         meta = {
             "filename": base_filename,
             "score": score,
@@ -121,14 +110,18 @@ if uploaded_file is not None:
             "passing_score": passing_score,
             "passed": score >= passing_score,
             "reason": reason,
-            "timestamp": timestamp,
-            "eval_duration": eval_duration
+            "timestamp": timestamp
         }
         meta_filename = f"{timestamp}_{unique_id}.json"
         meta_path = os.path.join(UPLOAD_DIR, meta_filename)
         with open(meta_path, "w", encoding="utf-8") as meta_file:
             json.dump(meta, meta_file, ensure_ascii=False, indent=2)
-        st.success(f"File and scores saved to '{UPLOAD_DIR}' directory. Score difference: {score_diff}")
+        st.session_state['batch_saved'][batch_index] = True
+        st.session_state['batch_index'] += 1
+        st.rerun()
+    st.progress((batch_index+1)/len(batch_files))
+elif batch_files:
+    st.success("Batch scoring complete! All files have been scored and saved.")
 
 # --- History Browsing Section ---
 
