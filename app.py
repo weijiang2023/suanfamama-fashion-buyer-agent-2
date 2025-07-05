@@ -4,6 +4,7 @@ import os
 import uuid
 import datetime
 import json
+import time
 
 st.title("Hello, World!")
 st.write("Welcome to your first Streamlit app!")
@@ -27,6 +28,8 @@ if 'timestamp' not in st.session_state:
     st.session_state['timestamp'] = None
 if 'unique_id' not in st.session_state:
     st.session_state['unique_id'] = None
+if 'eval_start_time' not in st.session_state:
+    st.session_state['eval_start_time'] = None
 
 if uploaded_file is not None:
     file_type = uploaded_file.type
@@ -43,12 +46,14 @@ if uploaded_file is not None:
         st.session_state['base_filename'] = base_filename
         st.session_state['last_file_id'] = file_id
         st.session_state['machine_score'] = random.randint(0, 100)
+        st.session_state['eval_start_time'] = time.time()  # Start timing
     # Use stored values
     timestamp = st.session_state['timestamp']
     unique_id = st.session_state['unique_id']
     base_filename = st.session_state['base_filename']
     score = st.session_state['machine_score']
     file_path = os.path.join(UPLOAD_DIR, base_filename)
+    eval_start_time = st.session_state['eval_start_time']
 
     # Save the uploaded file (only if not already saved)
     if not os.path.exists(file_path):
@@ -103,6 +108,8 @@ if uploaded_file is not None:
     # Save button
     if st.button("Save Scores and Metadata"):
         score_diff = abs(score - buyer_score)
+        eval_end_time = time.time()
+        eval_duration = eval_end_time - eval_start_time if eval_start_time else None
         meta = {
             "filename": base_filename,
             "score": score,
@@ -111,7 +118,8 @@ if uploaded_file is not None:
             "passing_score": passing_score,
             "passed": score >= passing_score,
             "reason": reason,
-            "timestamp": timestamp
+            "timestamp": timestamp,
+            "eval_duration": eval_duration
         }
         meta_filename = f"{timestamp}_{unique_id}.json"
         meta_path = os.path.join(UPLOAD_DIR, meta_filename)
@@ -120,7 +128,6 @@ if uploaded_file is not None:
         st.success(f"File and scores saved to '{UPLOAD_DIR}' directory. Score difference: {score_diff}")
 
 # --- History Browsing Section ---
-st.header("History of Evaluated Visuals")
 
 # Gather all .json metadata files in uploads/
 history_entries = []
@@ -142,6 +149,7 @@ for fname in os.listdir(UPLOAD_DIR):
                     'score_difference': meta.get('score_difference'),
                     'timestamp': meta.get('timestamp'),
                     'reason': meta.get('reason'),
+                    'eval_duration': meta.get('eval_duration'),
                 }
                 history_entries.append(entry)
         except Exception as e:
@@ -150,7 +158,24 @@ for fname in os.listdir(UPLOAD_DIR):
 # Sort by timestamp descending (most recent first)
 history_entries.sort(key=lambda x: x['timestamp'], reverse=True)
 
-# Display history
+# --- Summary Report ---
+st.header("Summary Report")
+total_evaluated = len(history_entries)
+if total_evaluated > 0:
+    avg_machine_score = sum(e['score'] for e in history_entries if e['score'] is not None) / total_evaluated
+    avg_buyer_score = sum(e['buyer_score'] for e in history_entries if e['buyer_score'] is not None) / total_evaluated
+    avg_difference = sum(e['score_difference'] for e in history_entries if e['score_difference'] is not None) / total_evaluated
+    total_time = sum(e['eval_duration'] for e in history_entries if e.get('eval_duration') is not None)
+    st.metric("Total Visuals Evaluated", total_evaluated)
+    st.metric("Average Machine Score", f"{avg_machine_score:.2f}")
+    st.metric("Average Buyer Score", f"{avg_buyer_score:.2f}")
+    st.metric("Average Difference", f"{avg_difference:.2f}")
+    st.metric("Total Evaluation Time (min)", f"{total_time/60:.2f}")
+else:
+    st.info("No evaluations yet.")
+
+# --- History Browsing Section ---
+st.header("History of Evaluated Visuals")
 for entry in history_entries:
     with st.container():
         col1, col2 = st.columns([1, 2])
@@ -165,4 +190,6 @@ for entry in history_entries:
             st.metric("Difference", entry['score_difference'])
             st.caption(f"Evaluated at: {entry['timestamp']}")
             st.caption(f"Reason: {entry['reason']}")
+            if entry.get('eval_duration') is not None:
+                st.caption(f"Evaluation Time: {entry['eval_duration']:.1f} sec")
         st.markdown("---")
