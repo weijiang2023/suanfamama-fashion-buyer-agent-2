@@ -215,4 +215,5 @@ for idx, entry in enumerate(history_entries):
                     st.success("Record deleted.")
                 except Exception as e:
                     st.error(f"Failed to delete: {e}")
+                st.rerun()
         st.markdown("---")
