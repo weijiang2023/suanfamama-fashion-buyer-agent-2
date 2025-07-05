@@ -118,3 +118,51 @@ if uploaded_file is not None:
         with open(meta_path, "w", encoding="utf-8") as meta_file:
             json.dump(meta, meta_file, ensure_ascii=False, indent=2)
         st.success(f"File and scores saved to '{UPLOAD_DIR}' directory. Score difference: {score_diff}")
+
+# --- History Browsing Section ---
+st.header("History of Evaluated Visuals")
+
+# Gather all .json metadata files in uploads/
+history_entries = []
+for fname in os.listdir(UPLOAD_DIR):
+    if fname.endswith('.json'):
+        meta_path = os.path.join(UPLOAD_DIR, fname)
+        try:
+            with open(meta_path, 'r', encoding='utf-8') as f:
+                meta = json.load(f)
+            # Find corresponding media file
+            media_path = os.path.join(UPLOAD_DIR, meta.get('filename', ''))
+            if os.path.exists(media_path):
+                entry = {
+                    'media_path': media_path,
+                    'is_image': meta['filename'].lower().endswith(('.jpg', '.jpeg', '.png')),
+                    'is_video': meta['filename'].lower().endswith(('.mp4', '.mov', '.avi')),
+                    'score': meta.get('score'),
+                    'buyer_score': meta.get('buyer_score'),
+                    'score_difference': meta.get('score_difference'),
+                    'timestamp': meta.get('timestamp'),
+                    'reason': meta.get('reason'),
+                }
+                history_entries.append(entry)
+        except Exception as e:
+            st.warning(f"Could not load metadata from {fname}: {e}")
+
+# Sort by timestamp descending (most recent first)
+history_entries.sort(key=lambda x: x['timestamp'], reverse=True)
+
+# Display history
+for entry in history_entries:
+    with st.container():
+        col1, col2 = st.columns([1, 2])
+        with col1:
+            if entry['is_image']:
+                st.image(entry['media_path'], width=120)
+            elif entry['is_video']:
+                st.video(entry['media_path'])
+        with col2:
+            st.metric("Machine Score", entry['score'])
+            st.metric("Buyer Score", entry['buyer_score'])
+            st.metric("Difference", entry['score_difference'])
+            st.caption(f"Evaluated at: {entry['timestamp']}")
+            st.caption(f"Reason: {entry['reason']}")
+        st.markdown("---")
