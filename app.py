@@ -31,6 +31,8 @@ if 'unique_id' not in st.session_state:
     st.session_state['unique_id'] = None
 if 'eval_start_time' not in st.session_state:
     st.session_state['eval_start_time'] = None
+if 'delete_trigger' not in st.session_state:
+    st.session_state['delete_trigger'] = 0
 
 if uploaded_file is not None:
     file_type = uploaded_file.type
@@ -151,6 +153,7 @@ for fname in os.listdir(UPLOAD_DIR):
                     'timestamp': meta.get('timestamp'),
                     'reason': meta.get('reason'),
                     'eval_duration': meta.get('eval_duration'),
+                    'meta_path': meta_path
                 }
                 history_entries.append(entry)
         except Exception as e:
@@ -185,7 +188,7 @@ else:
 
 # --- History Browsing Section ---
 st.header("History of Evaluated Visuals")
-for entry in history_entries:
+for idx, entry in enumerate(history_entries):
     with st.container():
         col1, col2 = st.columns([1, 2])
         with col1:
@@ -201,4 +204,15 @@ for entry in history_entries:
             st.caption(f"Reason: {entry['reason']}")
             if entry.get('eval_duration') is not None:
                 st.caption(f"Evaluation Time: {entry['eval_duration']:.1f} sec")
+            # Delete button
+            delete_key = f"delete_{entry['meta_path']}"
+            if st.button("Delete", key=delete_key):
+                try:
+                    os.remove(entry['meta_path'])
+                    if os.path.exists(entry['media_path']):
+                        os.remove(entry['media_path'])
+                    st.session_state['delete_trigger'] += 1  # Trigger rerun
+                    st.success("Record deleted.")
+                except Exception as e:
+                    st.error(f"Failed to delete: {e}")
         st.markdown("---")
